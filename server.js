@@ -33,13 +33,14 @@ app.get('/api', function (req, res) {
 app.route('/api/devices/')
     //Get all devices in database
     .get((req,res)=> {
-        connection.query('SELECT DISTINCT category from asterisk.ast_config ORDER BY category;', function (error, results, fields) {
+        connection.query('SELECT DISTINCT category from ast_config ORDER BY category;', function (error, results, fields) {
             if (error) throw error;
             res.send(results);
         });
     })
     //Insert new device into database
     .post((req, res) => {
+        //Check to make sure the body includes context, host, type, and category
         if (!('context' in req.body)) {
             return res.status(422).send('You need a context (default ltiit)');
         } else if (!('host' in req.body)) {
@@ -79,7 +80,7 @@ app.route('/api/devices/')
                         });
                     });
                 } else {
-                    //Already exists
+                    //Device already exists
                     res.send(`Sorry, ${req.body.category} already exists...`);
                 }
             });
@@ -87,9 +88,39 @@ app.route('/api/devices/')
     })
     //Update a device
     .put((req, res) => {
-        res.send('Updating a device!')
+        //Check to see if the body includes a category
+        if (!('category' in req.body)) {
+            res.status(422).send('You need a category (device name) to update');
+        } else {
+            //They are selecting based on category, so check to see if it even exists
+            connection.query(`SELECT category from ast_config WHERE category LIKE '${req.body.category}';`,(error,results,fields) => {
+                if (results.length < 1) {
+                    res.send(`Sorry, ${req.body.category} doesn't exist...`);
+                } else {
+                    //Lets start building the query since we know its in SQL, to start we have to know the max var metric for that category.
+                    connection.query(`SELECT MAX(var_metric) as current_max_var_metric from ast_config WHERE category LIKE '${req.body.category}';`,(error,results,fields) => {
+                        //Now that we have the max var_metric for the device, we can start incrementing it for new values
+                        let current_max_var_metric = results[0].current_max_var_metric;
+                        for (const key in req.body) {
+                            //We do not want to do anything with the category field.
+                            if (key !== "category") {
+                                connection.query(`SELECT * FROM ast_config WHERE var_name = ${key} category = '${req.body.category}'`, (error,results,fields) => {
+                                    if (results < 1) {
+                                        //Try inserting the k/v since you didn't find that var_name in the DB
+                                        console.log(`Trying to update ${key}, but couldnt find it, guess i'll have to make it`);
+                                    } else {
+                                        //Try updating since you found it.
+                                        connection.query(`UPDATE ast_config SET var_val = '${req.body[key]}' WHERE var_name = '${key}' AND category = '${req.body.category}';`);
+                                    }
+                                })
+                            }
+                        }
+                    });
+                }
+            });
+        };
     })
-    //Delete a device based on categorey (Name)
+    //Delete a device based on category (device name)
     .delete((req,res) => {
         //Check to see if the device they are deleting even exists
         connection.query(`SELECT category from ast_config WHERE category LIKE '${req.body.category}';`, (error,results,fields)=>{
