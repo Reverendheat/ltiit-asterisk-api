@@ -3,6 +3,7 @@ require('dotenv').config()
 const mysql = require('mysql');
 const express = require('express');
 const bodyParser = require('body-parser');
+const cors = require('cors')
 
 //Connect to MYSQL
 const connection = mysql.createConnection({
@@ -21,6 +22,7 @@ connection.connect(function(err) {
 
 //Create Express object and start server 
 const app = express();
+app.use(cors())
 app.use(bodyParser.json());
 app.listen(process.env.EXPRESS_PORT, () => console.log(`Asterisk API listening on port ${process.env.EXPRESS_PORT}!`));
 
@@ -33,7 +35,7 @@ app.get('/api', function (req, res) {
 app.route('/api/devices/')
     //Get all devices in database
     .get((req,res)=> {
-        connection.query('SELECT DISTINCT category from ast_config ORDER BY category;', function (error, results, fields) {
+        connection.query('SELECT DISTINCT cat_metric, category from ast_config ORDER BY category;', function (error, results, fields) {
             if (error) throw error;
             res.send(results);
         });
@@ -150,7 +152,7 @@ app.route('/api/devices/')
 //Get single device route based on cat_metric
 app.route('/api/devices/:cat_metric')
     .get((req, res) => {
-        connection.query(`SELECT var_name, var_val from ast_config WHERE cat_metric LIKE ${req.params.cat_metric} ORDER BY category;`, function (error, results, fields) {
+        connection.query(`SELECT id, var_name, var_val from ast_config WHERE cat_metric LIKE ${req.params.cat_metric} ORDER BY category;`, function (error, results, fields) {
             if (error) throw error;
             if (!results.length) {
                 return res.status(404).send(`It doesn't look like ${req.params.cat_metric} exists...`);
