@@ -88,7 +88,7 @@ app.route('/api/devices/')
     })
     //Update a device
     .put((req, res) => {
-        //Check to see if the body includes a category
+        //Check to see if the body includes a category, or else don't attempt to update.
         if (!('category' in req.body)) {
             res.status(422).send('You need a category (device name) to update');
         } else {
@@ -97,24 +97,33 @@ app.route('/api/devices/')
                 if (results.length < 1) {
                     res.send(`Sorry, ${req.body.category} doesn't exist...`);
                 } else {
-                    //Lets start building the query since we know its in SQL, to start we have to know the max var metric for that category.
-                    connection.query(`SELECT MAX(var_metric) as current_max_var_metric from ast_config WHERE category LIKE '${req.body.category}';`,(error,results,fields) => {
-                        //Now that we have the max var_metric for the device, we can start incrementing it for new values
+                    //Lets start building the query since we know its in SQL, to start we have to know the max var metric for that category, incase we need to add more var_name's and var_values.
+                    connection.query(`SELECT MAX(var_metric) as current_max_var_metric, cat_metric from ast_config WHERE category LIKE '${req.body.category}';`,(error,results,fields) => {
+                        //Now that we have the max var_metric for the device, we can start incrementing it for new values. We also grabbed cat_metric to reference in the insert query below (since 'results' get overwritten after every callback).
                         let current_max_var_metric = results[0].current_max_var_metric;
+                        let current_cat_metric = results[0].cat_metric;
                         for (const key in req.body) {
-                            //We do not want to do anything with the category field.
+                            //We do not want to do anything with the category field. Only need it for querying.
                             if (key !== "category") {
-                                connection.query(`SELECT * FROM ast_config WHERE var_name = ${key} category = '${req.body.category}'`, (error,results,fields) => {
-                                    if (results < 1) {
-                                        //Try inserting the k/v since you didn't find that var_name in the DB
-                                        console.log(`Trying to update ${key}, but couldnt find it, guess i'll have to make it`);
-                                    } else {
-                                        //Try updating since you found it.
-                                        connection.query(`UPDATE ast_config SET var_val = '${req.body[key]}' WHERE var_name = '${key}' AND category = '${req.body.category}';`);
+                                //Try to find if the key (var_name) exists
+                                connection.query(`SELECT * FROM ast_config WHERE var_name = '${key}' AND category = '${req.body.category}'`, (error,results,fields) => {
+                                    if (results.length < 1) {
+                                        //Try inserting the var_name/var_value since you didn't find that var_name in the DB, but first add one to the var_metric so Asterisk doesn't have a conniption.
+                                        new_max_var_metric = current_max_var_metric + 1
+                                        connection.query(`INSERT into ast_config (cat_metric,var_metric,filename,category,var_name,var_val,commented) VALUES (${current_cat_metric},${new_max_var_metric},'sip.conf','${req.body.category}','${key}','${req.body[key]}',0);`, (error,results,fields) => {
+                                            if (error) throw error;
+                                        })
+                                    } else { 
+                                        //Try updating the var_name/var_value since you found it.
+                                        connection.query(`UPDATE ast_config SET var_val = '${req.body[key]}' WHERE var_name = '${key}' AND category = '${req.body.category}';`, (error, results, fields)=>{
+                                            if (error) throw error;
+                                        });
                                     }
                                 })
                             }
                         }
+                        //Finally tell the client it has been completed.
+                        res.send(`Update has been completed on ${req.body.category}`)
                     });
                 }
             });
@@ -126,8 +135,10 @@ app.route('/api/devices/')
         connection.query(`SELECT category from ast_config WHERE category LIKE '${req.body.category}';`, (error,results,fields)=>{
             if (error) throw error;
             if (results.length < 1) {
+                //Nothing to delete
                 res.send(`It doesn't look like ${req.body.category} exists...`)
             } else {
+                //Delete the device based on category name
                 connection.query(`DELETE FROM ast_config WHERE category LIKE '${req.body.category}';`, (error,results,fields) => {
                     res.send(`${req.body.category} is gone!`);
                 })
