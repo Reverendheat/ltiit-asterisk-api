@@ -131,22 +131,7 @@ app.route('/api/devices/')
             });
         };
     })
-    //Delete a device based on category (device name)
-    .delete((req,res) => {
-        //Check to see if the device they are deleting even exists
-        connection.query(`SELECT category from ast_config WHERE category LIKE '${req.body.category}';`, (error,results,fields)=>{
-            if (error) throw error;
-            if (results.length < 1) {
-                //Nothing to delete
-                res.send(`It doesn't look like ${req.body.category} exists...`)
-            } else {
-                //Delete the device based on category name
-                connection.query(`DELETE FROM ast_config WHERE category LIKE '${req.body.category}';`, (error,results,fields) => {
-                    res.send(`${req.body.category} is gone!`);
-                })
-            }
-        });
-    });
+    
 
 
 //Get single device route based on cat_metric
@@ -160,3 +145,19 @@ app.route('/api/devices/:cat_metric')
             res.send(results);
         });
     })
+    //Delete a device based on cat_metric (value)
+    .delete((req,res) => {
+        //Check to see if the device they are deleting even exists
+        connection.query(`SELECT cat_metric from ast_config WHERE cat_metric LIKE '${req.params.cat_metric}';`, (error,results,fields)=>{
+            if (error) throw error;
+            if (results.length < 1) {
+                //Nothing to delete
+                res.send(`It doesn't look like ${req.params.cat_metric} exists...`)
+            } else {
+                //Delete the device based on cat_metric
+                connection.query(`DELETE FROM ast_config WHERE cat_metric LIKE '${req.params.cat_metric}';`, (error,results,fields) => {
+                    res.send(`Success, ${req.params.cat_metric} is gone!`);
+                })
+            }
+        });
+    });
